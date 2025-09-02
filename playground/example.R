@@ -40,6 +40,9 @@ c(a = a, b = b, cprime = cprime)
 res_sem <- upsilons(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE, R = 100)
 res_ols <- upsilons_ols(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE, R = 100)
 
+rsq_indirect(d, "x", "m", "y", R = 1000)
+
+
 res_both <- upsilons_sem_ols(d, x = "x", m = "m", y = "y", do_bootstrap = FALSE)
 
 

@@ -1,18 +1,21 @@
 Package: medes
-Type: Package
-Title: What the Package Does (Title Case)
+Title: Compute de Heus R-Squared Indirect for Mediation
 Version: 0.1.0
-Authors@R: c(
-    person(
-      "Jane", "Doe",
-      email = "jane@example.com",
-      role = c("aut", "cre")
-    )
-  )
-Description: More about what it does (maybe more than one line).
-    Continuation lines should be indented.
-License: What license is it under?
+Authors@R: 
+    person("Alexander", "Miles", email = "am365@email.sc.edu", role = c("aut", "cre"))
+Description: Provides a function to compute de Heus' R-squared for an 
+    indirect (mediation) pathway, with optional percentile bootstrap confidence 
+    intervals. Useful for mediation analysis in psychological and social science 
+    research.
+License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
-URL: https://github.com/alexm123/medes
-BugReports: https://github.com/alexm123/medes/issues
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends: R (>= 3.6)
+Imports:
+    boot,
+    QuantPsyc
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+

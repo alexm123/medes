@@ -1,3 +1,7 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^playground$
+^dev$
+^LICENSE\.md$
+^df_sim_res_compare_OLS_SEM_rounded$
+^df_sim_res_compare_OLS_SEM_rounded\.rds$
