@@ -45,4 +45,3 @@ rsq_indirect <- function(data, x, m, y,
 
   return(rsq_ind = rsq_ind)
 }
-
