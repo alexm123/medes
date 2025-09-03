@@ -1,4 +1,8 @@
-# Example data for mediation analysis
+devtools::install_github("alexm123/medes")
+library(medes)
+
+
+#Example data for mediation analysis
 set.seed(42)
 n <- 2000
 
@@ -35,12 +39,14 @@ c(a = a, b = b, cprime = cprime)
 ###############################################################################
 ###############################################################################
 #
-# rsquare_med(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE)
+rsquare_med(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE)
+MBESS::mediation(x = d[[1]], mediator = d[[2]], dv = d[[3]], B = 100)
+
 # rsq_indirect(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE)
 res_sem <- upsilons(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE, R = 100)
 res_ols <- upsilons_ols(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE, R = 100)
 
-upsilons_sem_ols(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE, R = 100)
+medes::upsilons_sem_ols(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE, R = 100)
 
 rsq_indirect(d, "x", "m", "y", R = 1000)
 
