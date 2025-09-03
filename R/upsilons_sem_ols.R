@@ -1,7 +1,72 @@
+#' Upsilon Mediation Effect Estimates via SEM and OLS
+#'
+#' Computes the Upsilon statistic for mediation effects using both
+#' Structural Equation Modeling (SEM, via \pkg{lavaan}) and
+#' Ordinary Least Squares (OLS). Optionally, percentile bootstrap
+#' confidence intervals are provided for both SEM- and OLS-based
+#' estimates.
+#'
+#' @param data A `data.frame` containing the variables of interest.
+#' @param x Character string. Name of the independent (predictor) variable.
+#' @param m Character string. Name of the mediator variable.
+#' @param y Character string. Name of the dependent (outcome) variable.
+#' @param R Integer. Number of bootstrap replications. Default is 5000.
+#' @param ci_level Numeric. Confidence level for bootstrap intervals
+#'   (between 0 and 1). Default is 0.95.
+#' @param do_bootstrap Logical. Whether to perform bootstrapping
+#'   to compute confidence intervals. Default is `TRUE`.
+#'
+#' @details
+#' The function fits a simple mediation model with one mediator
+#' using both SEM (\pkg{lavaan}) and two OLS regressions.
+#' Upsilon statistics (original and adjusted) are computed from
+#' path coefficients and covariance structure.
+#'
+#' If `do_bootstrap = TRUE`, bootstrap procedures are used:
+#' - SEM bootstrap is performed via [lavaan::bootstrapLavaan()].
+#' - OLS bootstrap uses resampling of rows (pairs bootstrap).
+#'
+#' The function returns point estimates and, if requested,
+#' percentile confidence intervals.
+#'
+#' @return A named `list` containing:
+#' \describe{
+#'   \item{upsilon_sem}{Point estimate of Upsilon from SEM.}
+#'   \item{adj.upsilon_sem}{Adjusted Upsilon from SEM.}
+#'   \item{ci.upsilon_sem}{Bootstrap CI for SEM Upsilon (if bootstrapped).}
+#'   \item{ci.adj.upsilon_sem}{Bootstrap CI for adjusted SEM Upsilon (if bootstrapped).}
+#'   \item{upsilon_ols}{Point estimate of Upsilon from OLS.}
+#'   \item{adj.upsilon_ols}{Adjusted Upsilon from OLS.}
+#'   \item{ci.upsilon_ols}{Bootstrap CI for OLS Upsilon (if bootstrapped).}
+#'   \item{ci.adj.upsilon_ols}{Bootstrap CI for adjusted OLS Upsilon (if bootstrapped).}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Example data
+#' set.seed(123)
+#' d <- data.frame(
+#'   x = rnorm(100),
+#'   m = rnorm(100),
+#'   y = rnorm(100)
+#' )
+#'
+#' # Run with bootstrap
+#' res <- upsilons_sem_ols(d, x = "x", m = "m", y = "y",
+#'                         do_bootstrap = TRUE, R = 100)
+#' str(res)
+#'
+#' # Run without bootstrap
+#' res2 <- upsilons_sem_ols(d, x = "x", m = "m", y = "y",
+#'                          do_bootstrap = FALSE)
+#' str(res2)
+#' }
+#'
+#' @export
 upsilons_sem_ols <- function(data, x, m, y,
-                     R = 5000,
-                     ci_level = 0.95,
-                     do_bootstrap = TRUE) {
+                             R = 5000,
+                             ci_level = 0.95,
+                             do_bootstrap = TRUE) {
   # Build mediation model (SEM)
   med.model <- paste0(m, " ~ ", x, "\n",
                       y, " ~ ", x, " + ", m)
@@ -76,7 +141,7 @@ upsilons_sem_ols <- function(data, x, m, y,
       as.vector(c(upsilon.boot, adj.upsilon.boot))
     }
 
-    message('Bootstrapping (SEM + OLS) may take several minutes…')
+    message('Bootstrapping (SEM + OLS) may take several minutes...')
     boot.med.res <- lavaan::bootstrapLavaan(med.res, R = R,
                                             type = "ordinary",
                                             FUN = lavaan.med.boot.fun)
@@ -168,9 +233,6 @@ upsilons_sem_ols <- function(data, x, m, y,
     adj.upsilon_ols = as.numeric(adj.upsilon_ols)
   ))
 }
-
-
-
 
 
 

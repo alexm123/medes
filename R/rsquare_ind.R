@@ -1,4 +1,4 @@
-#' # Function to compute de Heus' R squared Indirect
+#' Function to compute de Heus' R squared Indirect
 #'
 #' Computes the de Heus R^2 for an indirect (mediation) pathway with optional
 #' percentile bootstrap CIs.

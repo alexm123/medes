@@ -3,6 +3,7 @@ library(glue)
 library(lavaan)
 library(MASS)
 library(purrr)
+library(parallel)
 
 ####################################################################
 # STANDARDISED SIMULATION FUNCTION
@@ -75,6 +76,25 @@ run_simulation_upsilon <- function(pop_tau_prime,
   )
 }
 
+
+
+# Making parameters
+sample_sizes <- c(5, 20, 50, 100, 250, 500)
+effect_sizes <- c(0.00, 0.14, 0.39, 0.59)
+
+# Containing all the conditions
+df_params <- expand.grid(
+  N = sample_sizes,
+  pop_alpha = effect_sizes,
+  pop_beta = effect_sizes,
+  pop_tau_prime = effect_sizes
+)
+# Exclude the non–positive-definite combo (0.59 for all three)
+df_params <- subset(
+  df_params,
+  !(pop_alpha == 0.59 & pop_beta == 0.59 & pop_tau_prime == 0.59)
+)
+
 # Apply to each row of df_params (non-parallel)
 sim_function <- function(params_row) {
   run_simulation_upsilon(
@@ -82,14 +102,39 @@ sim_function <- function(params_row) {
     pop_alpha     = params_row[["pop_alpha"]],
     pop_beta      = params_row[["pop_beta"]],
     pop_tau_prime = params_row[["pop_tau_prime"]],
-    num_reps      = 1000
+    num_reps      = 100
   )
 }
 
 # Run
-system_time <- system.time({
-  sim_res <- lapply(seq_len(nrow(df_params)), function(i) sim_function(df_params[i, ]))
+n_cores <- max(1, detectCores() - 1)
+cl <- makeCluster(n_cores)
+
+# (Optional) load packages & export needed symbols to workers
+clusterEvalQ(cl, {
+  library(dplyr)
+  library(glue)
+  library(lavaan)
+  library(MASS)
+  library(purrr)
+  library(parallel)
 })
+
+clusterExport(cl, c("df_params",
+                    "sim_function",
+                    "run_simulation_upsilon",
+                    "upsilons_sem_ols"))
+
+
+system_time <- system.time({
+  sim_res <- parLapply(
+    cl,
+    X = seq_len(nrow(df_params)),
+    fun = function(i) sim_function(df_params[i, ])
+  )
+})
+
+stopCluster(cl)
 
 # Bind to a single data frame
 df_sim_res <- dplyr::bind_rows(sim_res)
@@ -104,7 +149,7 @@ df_sim_res_rounded <- df_sim_res_rounded %>%
   dplyr::mutate(diff_adj_ols_minus_sem = sim_adj_upsilon_ols - sim_adj_upsilon_sem)
 
 
-saveRDS(df_sim_res, file = "df_sim_res_compare_OLS_SEM_rounded.rds")
+#saveRDS(df_sim_res, file = "df_sim_res_compare_OLS_SEM_rounded.rds")
 
 
 
@@ -123,69 +168,50 @@ saveRDS(df_sim_res, file = "df_sim_res_compare_OLS_SEM_rounded.rds")
 
 
 
-res_sem <- upsilons(d_sim, x = "x", m = "m", y = "y", do_bootstrap = FALSE, R = 1000)
-res_ols <- upsilons_ols(d_sim, x = "x", m = "m", y = "y", do_bootstrap = TRUE, R = 1000)
-
-res_sem
-res_ols
-
-# Making sure simulation and population effect sizes are as they should be
-model1_sim <- lm(m ~ x, data = out$sim_matrix)
-alpha_sim <- coef(model1_sim)[["x"]]
-
-model2_sim <- lm(y ~ x + m, data = out$sim_matrix)
-tau_prime_sim <- coef(model2_sim)[["x"]]
-
-beta_sim <- coef(model2_sim)[["m"]]
-
-c(alpha, beta, tau_prime)
-
-
-model1_pop <-lm(m ~ x, data = out$pop_data)
-alpha_pop <- coef(model1_pop)[["x"]]
-
-model2_pop <- lm(y ~ x + m, data = out$pop_data)
-tau_prime_pop <- coef(model2_pop)[["x"]]
-beta_pop <- coef(model2_pop)[["m"]]
-
-c(alpha_pop, beta_pop, tau_prime_pop)
-
-
-
-# Making parameters
-sample_sizes <- c(20, 50, 100, 200, 500, 1000)
-effect_sizes <- c(0.00, 0.14, 0.39, 0.59)
-
-# Containing all the conditions
-df_params <- expand.grid(
-  N = sample_sizes,
-  pop_alpha = effect_sizes,
-  pop_beta = effect_sizes,
-  pop_tau_prime = effect_sizes
-)
-
-# Exclude the non–positive-definite combo (0.59 for all three)
-df_params <- subset(
-  df_params,
-  !(pop_alpha == 0.59 & pop_beta == 0.59 & pop_tau_prime == 0.59)
-)
-
-simulation_function <- function(params) {
-  run_simulation_small_standardized(
-    sample_size  = params[["N"]],
-    pop_alpha    = params[["pop_alpha"]],
-    pop_beta     = params[["pop_beta"]],
-    pop_tau_prime= params[["pop_tau_prime"]],
-    num_reps     = 20
-  )
-}
-
-# Run sequentially (no parallelization)
-system_time <- system.time({
-  sim_res <- lapply(1:nrow(df_params), function(i) simulation_function(df_params[i, ]))
-})
-
-head(sim_res)[[1]]
+# res_sem <- upsilons(d_sim, x = "x", m = "m", y = "y", do_bootstrap = FALSE, R = 1000)
+# res_ols <- upsilons_ols(d_sim, x = "x", m = "m", y = "y", do_bootstrap = TRUE, R = 1000)
+#
+# res_sem
+# res_ols
+#
+# # Making sure simulation and population effect sizes are as they should be
+# model1_sim <- lm(m ~ x, data = out$sim_matrix)
+# alpha_sim <- coef(model1_sim)[["x"]]
+#
+# model2_sim <- lm(y ~ x + m, data = out$sim_matrix)
+# tau_prime_sim <- coef(model2_sim)[["x"]]
+#
+# beta_sim <- coef(model2_sim)[["m"]]
+#
+# c(alpha, beta, tau_prime)
+#
+#
+# model1_pop <-lm(m ~ x, data = out$pop_data)
+# alpha_pop <- coef(model1_pop)[["x"]]
+#
+# model2_pop <- lm(y ~ x + m, data = out$pop_data)
+# tau_prime_pop <- coef(model2_pop)[["x"]]
+# beta_pop <- coef(model2_pop)[["m"]]
+#
+# c(alpha_pop, beta_pop, tau_prime_pop)
+#
+#
+# simulation_function <- function(params) {
+#   run_simulation_small_standardized(
+#     sample_size  = params[["N"]],
+#     pop_alpha    = params[["pop_alpha"]],
+#     pop_beta     = params[["pop_beta"]],
+#     pop_tau_prime= params[["pop_tau_prime"]],
+#     num_reps     = 20
+#   )
+# }
+#
+# # Run sequentially (no parallelization)
+# system_time <- system.time({
+#   sim_res <- lapply(1:nrow(df_params), function(i) simulation_function(df_params[i, ]))
+# })
+#
+# head(sim_res)[[1]]
 
 
 
