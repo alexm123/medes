@@ -106,11 +106,7 @@ upsilons_ols <- function(data, x, m, y,
       adj.upsilon = as.numeric(adj_upsilon),
 
       ci.upsilon = ci_ups,
-      ci.adj.upsilon = ci_adj,
-
-      # ADDED: report bootstrap convergence counts
-      boot.converged = R_success,
-      boot.failed = R_failed
+      ci.adj.upsilon = ci_adj
     ))
   }
 
@@ -119,21 +115,3 @@ upsilons_ols <- function(data, x, m, y,
     adj.upsilon = as.numeric(adj_upsilon)
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

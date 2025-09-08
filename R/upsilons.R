@@ -60,10 +60,10 @@
 #'
 #' @export
 upsilons <- function(data, x, m, y,
-                             engine = c("both", "sem", "ols"),
-                             R = 5000,
-                             ci_level = 0.95,
-                             do_bootstrap = TRUE) {
+                     engine = c("both", "sem", "ols"),
+                     R = 5000,
+                     ci_level = 0.95,
+                     do_bootstrap = TRUE) {
   engine <- match.arg(engine)
   do_sem <- engine %in% c("both", "sem")
   do_ols <- engine %in% c("both", "ols")

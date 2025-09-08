@@ -2,7 +2,7 @@
 
 export(rsq_indirect)
 export(rsquare_med)
-export(upsilons_sem_ols)
+export(upsilons)
 importFrom(stats,as.formula)
 importFrom(stats,cor)
 importFrom(stats,lm)
