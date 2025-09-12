@@ -17,6 +17,9 @@
 #'   (between 0 and 1). Default is 0.95.
 #' @param do_bootstrap Logical. Whether to perform bootstrapping
 #'   to compute confidence intervals. Default is `TRUE`.
+#' @param stat Character. One of `"adjusted"` (default), `"unadjusted"`, or `"both"`.
+#'   Controls whether only adjusted, only unadjusted, or both statistics (and CIs,
+#'   if bootstrapping) are returned.
 #'
 #' @details
 #' The function fits a simple mediation model with one mediator using
@@ -27,18 +30,19 @@
 #' - SEM bootstrap is performed via [lavaan::bootstrapLavaan()] (if `engine` includes `"sem"`).
 #' - OLS bootstrap uses row-resampling (pairs bootstrap) (if `engine` includes `"ols"`).
 #'
-#' The returned list includes only elements for the requested `engine`.
+#' The returned list includes only elements for the requested `engine`
+#' and the requested `stat`.
 #'
 #' @return A named `list` containing some or all of:
 #' \describe{
-#'   \item{upsilon_sem}{Point estimate of Upsilon from SEM.}
-#'   \item{adj.upsilon_sem}{Adjusted Upsilon from SEM.}
-#'   \item{ci.upsilon_sem}{Bootstrap CI for SEM Upsilon (if bootstrapped).}
-#'   \item{ci.adj.upsilon_sem}{Bootstrap CI for adjusted SEM Upsilon (if bootstrapped).}
-#'   \item{upsilon_ols}{Point estimate of Upsilon from OLS.}
-#'   \item{adj.upsilon_ols}{Adjusted Upsilon from OLS.}
-#'   \item{ci.upsilon_ols}{Bootstrap CI for OLS Upsilon (if bootstrapped).}
-#'   \item{ci.adj.upsilon_ols}{Bootstrap CI for adjusted OLS Upsilon (if bootstrapped).}
+#'   \item{upsilon_sem}{Point estimate of Upsilon from SEM (if requested).}
+#'   \item{adj.upsilon_sem}{Adjusted Upsilon from SEM (if requested).}
+#'   \item{ci.upsilon_sem}{Bootstrap CI for SEM Upsilon (if requested & bootstrapped).}
+#'   \item{ci.adj.upsilon_sem}{Bootstrap CI for adjusted SEM Upsilon (if requested & bootstrapped).}
+#'   \item{upsilon_ols}{Point estimate of Upsilon from OLS (if requested).}
+#'   \item{adj.upsilon_ols}{Adjusted Upsilon from OLS (if requested).}
+#'   \item{ci.upsilon_ols}{Bootstrap CI for OLS Upsilon (if requested & bootstrapped).}
+#'   \item{ci.adj.upsilon_ols}{Bootstrap CI for adjusted OLS Upsilon (if requested & bootstrapped).}
 #' }
 #'
 #' @examples
@@ -56,15 +60,29 @@
 #'
 #' # Both (default)
 #' res_both <- upsilons(d, x="x", m="m", y="y")
-#' }
 #'
+#'
+#' # Unadjusted statistic only
+#' res_unadjusted_stat <- upsilons(d, x="x", m="m", y="y", stat="unadjusted")
+#'
+#'
+#' # Adjusted statistic only (default)
+#' res_adjusted_stat <- upsilons(d, x="x", m="m", y="y", stat="adjusted")
+#'
+#'
+#' # Both statistics
+#' res_both_stats <- upsilons(d, x="x", m="m", y="y", stat="both")
+#'
+#' }
 #' @export
 upsilons <- function(data, x, m, y,
                      engine = c("both", "sem", "ols"),
-                     R = 5000,
+                     R = 1000,
                      ci_level = 0.95,
-                     do_bootstrap = TRUE) {
+                     do_bootstrap = TRUE,
+                     stat = c("adjusted", "unadjusted", "both")) {
   engine <- match.arg(engine)
+  stat <- match.arg(stat)
   do_sem <- engine %in% c("both", "sem")
   do_ols <- engine %in% c("both", "ols")
 
@@ -105,14 +123,23 @@ upsilons <- function(data, x, m, y,
                           (b_sem^2 - vc_sem[paste0(y, "~", m), paste0(y, "~", m)]) *
                           scov_sem[x, x] / scov_sem[y, y])
 
-    out$upsilon_sem <- as.numeric(upsilon_sem)
-    out$`adj.upsilon_sem` <- as.numeric(adj.upsilon_sem)
+    if (stat %in% c("unadjusted", "both")) {
+      out$upsilon_sem <- as.numeric(upsilon_sem)
+    }
+    if (stat %in% c("adjusted", "both")) {
+      out$`adj.upsilon_sem` <- as.numeric(adj.upsilon_sem)
+    }
   }
 
   # ---------- OLS ----------
   if (do_ols) {
-    fit_a <- stats::lm(stats::as.formula(paste(m, "~", x)), data = data)
-    fit_b <- stats::lm(stats::as.formula(paste(y, "~", x, "+", m)), data = data)
+
+    # Use listwise deletion
+    keeps <- stats::complete.cases(data[, c(x, m, y)])
+    data_cc <- data[keeps, , drop = FALSE]
+
+    fit_a <- stats::lm(stats::as.formula(paste(m, "~", x)), data = data_cc)
+    fit_b <- stats::lm(stats::as.formula(paste(y, "~", x, "+", m)), data = data_cc)
 
     a_ols <- stats::coef(fit_a)[x]
     b_ols <- stats::coef(fit_b)[m]
@@ -120,15 +147,19 @@ upsilons <- function(data, x, m, y,
     vc_a_ols <- stats::vcov(fit_a)[x, x]
     vc_b_ols <- stats::vcov(fit_b)[m, m]
 
-    scov_ols <- stats::cov(data[, c(x, y, m)], use = "pairwise.complete.obs")
+    scov_ols <- stats::cov(data_cc[, c(x, y, m)])
 
     upsilon_ols <- (a_ols^2 * b_ols^2) * scov_ols[x, x] / scov_ols[y, y]
     adj.upsilon_ols <- ((a_ols^2 - vc_a_ols) *
                           (b_ols^2 - vc_b_ols) *
                           scov_ols[x, x] / scov_ols[y, y])
 
-    out$upsilon_ols <- as.numeric(upsilon_ols)
-    out$`adj.upsilon_ols` <- as.numeric(adj.upsilon_ols)
+    if (stat %in% c("unadjusted", "both")) {
+      out$upsilon_ols <- as.numeric(upsilon_ols)
+    }
+    if (stat %in% c("adjusted", "both")) {
+      out$`adj.upsilon_ols` <- as.numeric(adj.upsilon_ols)
+    }
   }
 
   # ---------- Bootstrap ----------
@@ -170,12 +201,16 @@ upsilons <- function(data, x, m, y,
       boot.sem.mat <- if (is.list(boot.med.res)) do.call(rbind, boot.med.res) else
         as.matrix(boot.med.res)
 
-      out$ci.upsilon_sem <- stats::quantile(boot.sem.mat[, 1],
-                                            probs = c(alpha/2, 1 - alpha/2),
-                                            na.rm = TRUE)
-      out$`ci.adj.upsilon_sem` <- stats::quantile(boot.sem.mat[, 2],
-                                                  probs = c(alpha/2, 1 - alpha/2),
-                                                  na.rm = TRUE)
+      if (stat %in% c("unadjusted", "both")) {
+        out$ci.upsilon_sem <- stats::quantile(boot.sem.mat[, 1],
+                                              probs = c(alpha/2, 1 - alpha/2),
+                                              na.rm = TRUE)
+      }
+      if (stat %in% c("adjusted", "both")) {
+        out$`ci.adj.upsilon_sem` <- stats::quantile(boot.sem.mat[, 2],
+                                                    probs = c(alpha/2, 1 - alpha/2),
+                                                    na.rm = TRUE)
+      }
     }
 
     # --- OLS bootstrap (pairs bootstrap on rows) ---
@@ -187,11 +222,15 @@ upsilons <- function(data, x, m, y,
         idx <- sample.int(n, n, replace = TRUE)
         db  <- data[idx, , drop = FALSE]
 
+        # Use listwise deletion
+        db_cc <- db[stats::complete.cases(db), , drop = FALSE]
+        if (nrow(db_cc) < 3) return(c(NA_real_, NA_real_))
+
         a_val <- b_val <- NA_real_
         vc_a  <- vc_b  <- NA_real_
 
         # a-path
-        fit_a_b <- try(stats::lm(stats::as.formula(paste(m, "~", x)), data = db),
+        fit_a_b <- try(stats::lm(stats::as.formula(paste(m, "~", x)), data = db_cc),
                        silent = TRUE)
         if (!inherits(fit_a_b, "try-error")) {
           coefs <- try(stats::coef(fit_a_b), silent = TRUE)
@@ -203,7 +242,7 @@ upsilons <- function(data, x, m, y,
         }
 
         # b-path
-        fit_b_b <- try(stats::lm(stats::as.formula(paste(y, "~", x, "+", m)), data = db),
+        fit_b_b <- try(stats::lm(stats::as.formula(paste(y, "~", x, "+", m)), data = db_cc),
                        silent = TRUE)
         if (!inherits(fit_b_b, "try-error")) {
           coefs <- try(stats::coef(fit_b_b), silent = TRUE)
@@ -214,8 +253,11 @@ upsilons <- function(data, x, m, y,
           }
         }
 
-        scov_b <- try(stats::cov(db[, c(x, y, m)], use = "pairwise.complete.obs"),
-                      silent = TRUE)
+        # scov_b <- try(stats::cov(db[, c(x, y, m)]),
+        #               silent = TRUE)
+
+        scov_b <- stats::cov(db_cc[, c(x, y, m)])
+
         if (inherits(scov_b, "try-error") || anyNA(dim(scov_b))) {
           scov_b <- matrix(NA_real_, 3, 3,
                            dimnames = list(c(x, y, m), c(x, y, m)))
@@ -228,12 +270,16 @@ upsilons <- function(data, x, m, y,
       })
 
       boot_ols <- t(boot_ols)
-      out$ci.upsilon_ols <- stats::quantile(boot_ols[, 1],
-                                            probs = c(alpha/2, 1 - alpha/2),
-                                            na.rm = TRUE)
-      out$`ci.adj.upsilon_ols` <- stats::quantile(boot_ols[, 2],
-                                                  probs = c(alpha/2, 1 - alpha/2),
-                                                  na.rm = TRUE)
+      if (stat %in% c("unadjusted", "both")) {
+        out$ci.upsilon_ols <- stats::quantile(boot_ols[, 1],
+                                              probs = c(alpha/2, 1 - alpha/2),
+                                              na.rm = TRUE)
+      }
+      if (stat %in% c("adjusted", "both")) {
+        out$`ci.adj.upsilon_ols` <- stats::quantile(boot_ols[, 2],
+                                                    probs = c(alpha/2, 1 - alpha/2),
+                                                    na.rm = TRUE)
+      }
     }
   }
 

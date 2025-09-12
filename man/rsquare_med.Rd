@@ -2,9 +2,18 @@
 % Please edit documentation in R/rsquare_med.R
 \name{rsquare_med}
 \alias{rsquare_med}
-\title{Fairchild et al.'s R-squared Mediated Effect}
+\title{Fairchild et al.'s R-squared Mediated Effect (OLS and/or SEM)}
 \usage{
-rsquare_med(data, x, m, y, R = 5000, ci_level = 0.95, do_bootstrap = TRUE)
+rsquare_med(
+  data,
+  x,
+  m,
+  y,
+  engine = c("both", "ols", "sem"),
+  R = 1000,
+  ci_level = 0.95,
+  do_bootstrap = TRUE
+)
 }
 \arguments{
 \item{data}{A \code{data.frame} containing the variables of interest.}
@@ -15,6 +24,9 @@ rsquare_med(data, x, m, y, R = 5000, ci_level = 0.95, do_bootstrap = TRUE)
 
 \item{y}{Character string. Name of the dependent (outcome) variable.}
 
+\item{engine}{Character. One of \code{"ols"}, \code{"sem"}, or \code{"both"} (default).
+Controls which estimator(s) are computed and bootstrapped.}
+
 \item{R}{Integer. Number of bootstrap replications (default = 5000).}
 
 \item{ci_level}{Numeric. Confidence level for bootstrap intervals
@@ -24,41 +36,61 @@ rsquare_med(data, x, m, y, R = 5000, ci_level = 0.95, do_bootstrap = TRUE)
 compute confidence intervals. Default is \code{TRUE}.}
 }
 \value{
-If \code{do_bootstrap = FALSE}, a single numeric value:
-\item{rsquaredmediated}{The estimated mediated R-squared.}
-
-If \code{do_bootstrap = TRUE}, a list with elements:
+\itemize{
+\item If \code{engine = "ols"} and \code{do_bootstrap = FALSE}, returns a single numeric
+(backward-compatible).
+\item Otherwise, returns a named \code{list} with some or all of:
 \describe{
-\item{rsquaredmediated_ci_lower}{Lower percentile CI bound.}
-\item{rsquaredmediated}{Point estimate of mediated R-squared.}
-\item{rsquaredmediated_ci_upper}{Upper percentile CI bound.}
+\item{rsquaredmediated_ols}{Point estimate (OLS).}
+\item{rsquaredmediated_ci_lower_ols, rsquaredmediated_ci_upper_ols}{Percentile CI (OLS) if bootstrapped.}
+\item{rsquaredmediated_sem}{Point estimate (SEM).}
+\item{rsquaredmediated_ci_lower_sem, rsquaredmediated_ci_upper_sem}{Percentile CI (SEM) if bootstrapped.}
+}
 }
 }
 \description{
 Computes the proportion of variance in the outcome that is mediated
 via a single mediator, following the approach of Fairchild et al.
-Optionally returns bootstrap confidence intervals.
+Supports an OLS (correlation-based) engine and a SEM engine (via
+\pkg{lavaan}) that uses model-implied correlations. Optionally
+returns percentile bootstrap confidence intervals.
 }
 \details{
-The mediated R-squared is calculated from pairwise correlations among
-the predictor, mediator, and outcome variables. When bootstrapping is
-enabled, the function resamples rows with replacement and recomputes
-the statistic, returning percentile confidence intervals.
+If missing data are detected in \code{x}, \code{m}, or \code{y},
+the function prints: "Hello! You have missing data. We recommend SEM,
+which will use FIML." When SEM is requested in this case, it fits the
+model with FIML (\code{missing = "fiml"}).
+
+\strong{OLS engine.} Uses observed pairwise correlations among \code{x}, \code{m}, \code{y}:
+\deqn{R^2_{y\cdot xm} = \frac{r_{xy}^2 + r_{my}^2 - 2 r_{xy} r_{my} r_{xm}}{1 - r_{xm}^2}}
+and \deqn{R^2_\mathrm{med} = r_{my}^2 - \left(R^2_{y\cdot xm} - r_{xy}^2\right).}
+OLS uses listwise deletion.
+
+\strong{SEM engine.} Fits the path model \code{m ~ x; y ~ x + m} in \pkg{lavaan},
+obtains the model-implied covariance for \code{x,m,y}, converts to correlations,
+and plugs them into the same Fairchild formula. If missing data are detected,
+\pkg{lavaan} is run with \code{missing = "fiml"} (FIML).
+
+If \code{do_bootstrap = TRUE}:
+\itemize{
+\item OLS uses a pairs bootstrap (row resampling) with \pkg{boot}.
+\item SEM uses \code{\link[lavaan:bootstrap]{lavaan::bootstrapLavaan()}} and recomputes the statistic from each
+bootstrapped fitted object (respecting the \code{missing} setting).
+}
 }
 \examples{
 \dontrun{
 set.seed(123)
-d <- data.frame(
-  x = rnorm(100),
-  m = rnorm(100),
-  y = rnorm(100)
-)
+d <- data.frame(x = rnorm(200), m = rnorm(200), y = rnorm(200))
 
-# Without bootstrap
-rsquare_med(d, x = "x", m = "m", y = "y", do_bootstrap = FALSE)
+# OLS only (numeric return, no bootstrap)
+rsq_ols <- rsquare_med(d, x="x", m="m", y="y", engine="ols", do_bootstrap=FALSE)
 
-# With bootstrap (small R for speed)
-rsquare_med(d, x = "x", m = "m", y = "y", R = 100, do_bootstrap = TRUE)
+# SEM only with bootstrap
+rsq_sem <- rsquare_med(d, x="x", m="m", y="y", engine="sem", R=1000)
+
+# Both engines
+rsq_both <- rsquare_med(d, x="x", m="m", y="y", engine="both", R=1000)
 }
 
 }

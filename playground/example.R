@@ -1,12 +1,11 @@
 devtools::install_github("alexm123/medes")
 library(medes)
-
-
+library(mice)
 
 
 #Example data for mediation analysis
-set.seed(42)
-n <- 2000
+set.seed(41)
+n <- 500
 
 # Independent variable (x)
 x <- rnorm(n, mean = 50, sd = 10)
@@ -20,9 +19,40 @@ y <- 0.3*x + 0.6*m + rnorm(n, mean = 0, sd = 5)
 # Create dataframe
 d <- data.frame(x, m, y)
 
+d_scaled <- scale(d) |> as.data.frame()
+
+# Introduce MAR 30%
+amp <- ampute(
+  data = d,
+  prop = 0.30,          # overall missing fraction
+  mech = "MAR"          # MAR (not MCAR/MNAR)
+)
+
+d_mar <- amp$amp
+
+
+# 5e6 = 5 million
+pop_n <- 5e4
+pop_x <- rnorm(pop_n, mean = 50, sd = 10)
+pop_m <- 0.5*pop_x + rnorm(pop_n, mean = 0, sd = 5)
+pop_y <- 0.3*pop_x + 0.6*pop_m + rnorm(pop_n, mean = 0, sd = 5)
+pop_d <- data.frame(pop_x, pop_m, pop_y)
+
+# MAR
+
 # View the first few rows
 head(d)
 
+lm_test_pop <- lm(data = pop_d, pop_y ~ pop_x)
+summary(lm_test)
+rm(lm_test_pop)
+
+lm_test <- lm(data = d, y ~ x)
+summary(lm_test)
+rm(lm_test)
+
+# delete population when done to save memory
+rm(pop_n, pop_x, pop_m, pop_y, pop_d)
 
 # Z-score the variables
 Z <- as.data.frame(scale(d))
@@ -40,9 +70,50 @@ c(a = a, b = b, cprime = cprime)
 ###############################################################################
 ###############################################################################
 ###############################################################################
-#
-rsquare_med(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE)
-MBESS::mediation(x = d[[1]], mediator = d[[2]], dv = d[[3]], B = 100)
+
+
+rsquare_med(d, x = "x", m = "m", y = "y",
+                 do_bootstrap = TRUE, R = 100)
+
+
+
+rsq_med_TRUE <- rsquare_med_test(pop_d, x = "pop_x", m = "pop_m", y = "pop_y",
+                                do_bootstrap = TRUE, engine='both', R = 100)
+
+# Rsquare mediated with confidence intervals
+rsq_med_medes <- rsquare_med(d, x = "x", m = "m", y = "y",
+                 do_bootstrap = TRUE, R = 100, engine='both')
+
+# Rsquare mediated with confidence intervals on MAR 30% data
+rsq_med_medes_MAR <- rsquare_med(d_mar, x = "x", m = "m", y = "y",
+                                 do_bootstrap = TRUE, R = 100, engine='sem')
+
+
+rsq_med_components_test <- rsquare_med_components(d, x = "x", m = "m", y = "y",
+                                                  do_bootstrap = FALSE, engine='both',
+                                                  R = 100)
+rsq_med_components_test_scaled <- rsquare_med_components(d_scaled, x = "x", m = "m", y = "y",
+                                            do_bootstrap = FALSE, engine='both',
+                                            R = 100)
+
+rsquare_med_test(d_scaled, x = "x", m = "m", y = "y",
+                  do_bootstrap = TRUE, R = 100, engine='both')
+
+
+
+
+ups_medes <- upsilons(d, x = "x", m = "m", y = "y",
+                      do_bootstrap = TRUE,
+                      R = 100, engine='both', stat='both')
+
+
+res_mbess <- MBESS::mediation(x = d[[1]], mediator = d[[2]], dv = d[[3]],
+                 bootstrap = TRUE, B = 100, which.boot="percentile")
+
+# everything <- medes_all(d, x = "x", m = "m", y = "y",
+#                         do_bootstrap = FALSE)
+
+
 
 # rsq_indirect(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE)
 res_sem <- upsilons(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE, R = 100)
@@ -50,11 +121,27 @@ res_ols <- upsilons_ols(d, x = "x", m = "m", y = "y", do_bootstrap = TRUE, R = 1
 res_sem
 res_ols
 
-MBESS::upsilon(x = d[[1]], mediator = d[[2]], dv = d[[3]], B = 100)
-upsilons_sem_ols(d, x = "x", m = "m", y = "y",
-                 do_bootstrap = TRUE,
-                 R = 100,
-                 engine='both')
+# Generate data!
+######################
+######################
+######################
+sim_dat <- sim_mediation(0.4, 0.4, 0.4, 1000)
+var(sim_dat)
+MBESS::upsilon(x = sim_dat[[1]], mediator = sim_dat[[2]], dv = sim_dat[[3]], bootstrap = FALSE)
+
+upsilons(sim_dat, x = "x", m = "m", y = "y",
+         do_bootstrap = FALSE, stat='both')
+
+model1 <- lm(m ~ x, data = sim_dat)
+model2 <- lm(y ~ x + m, data = sim_dat)
+
+QuantPsyc::lm.beta(model1)
+QuantPsyc::lm.beta(model2)
+
+
+######################
+######################
+######################
 
 
 
@@ -150,24 +237,122 @@ avg_bootstraps
 
 
 
-rsq_med_from_paths <- function(a, b, cprime) {
-  a^2 * (b^2 + cprime^2) + 2*a*b*cprime
+
+
+
+
+# Function to list top memory consumers in the environment
+who_big <- function(env = .GlobalEnv, n = 10) {
+  objs <- ls(envir = env)
+  sizes <- sapply(objs, function(x) object.size(get(x, envir = env)))
+  sizes <- sort(sizes, decreasing = TRUE)
+
+  # return top n as data.frame
+  data.frame(
+    Object = names(sizes),
+    Size_MB = round(sizes / 1024^2, 2)
+  )[1:min(n, length(sizes)), ]
 }
-rsq_ind_from_paths <- function(a, b) (1 - a^2) * (a * b)^2
+
+# Example usage:
+who_big()        # top 10
+who_big(n = 20)  # top 20
 
 
-rsq_med_from_paths(a =      0.39,
-                   b =      0.39,
-                   cprime = 0.59)
 
+# Toy dataset from "Friendship" Zhang et al...
+# --- Published moments -------------------------------------------------------
+library(lavaan)
+vars <- c("loneliness","social_comp","friendship_quality","social_pref","prox_prestige")
 
-rsq_ind_from_paths(a =      0.39,
-                   b =      0.39)
+# Correlations from the table (upper/lower triangle filled symmetrically)
+R <- matrix(c(
+  1.00,  -0.69, -0.41, -0.44, -0.37,
+  -0.69,   1.00,  0.34,  0.29,  0.23,
+  -0.41,   0.34,  1.00,  0.31,  0.26,
+  -0.44,   0.29,  0.31,  1.00,  0.60,
+  -0.37,   0.23,  0.26,  0.60,  1.00
+), 5, 5, byrow = TRUE, dimnames = list(vars, vars))
 
+mu  <- c(1.73, 2.85, 2.99, 0.00, 0.42)        # means
+sdv <- c(0.72, 0.53, 0.75, 1.72, 0.10)        # SDs
+N   <- 509
 
-(0.39^2) * (0.39^2)
+# Covariance matrix from correlations + SDs
+S <- diag(sdv) %*% R %*% diag(sdv)
+dimnames(S) <- list(vars, vars)
+# --- Model mapping -----------------------------------------------------------
+Y  <- "loneliness"
+M  <- "social_pref"
+X1 <- "social_comp"
+X2 <- "friendship_quality"
+X3 <- "prox_prestige"   # last predictor; we'll fix X3 -> M to zero
 
+# --- Constrained model: X3 -> M fixed to 0 ----------------------------------
+model_constrained <- glue::glue('
+  {M} ~ a1*{X1} + a2*{X2}
+  {Y} ~ c1p*{X1} + c2p*{X2} + c3p*{X3} + b*{M}
 
+  # allow predictors to correlate
+  {X1} ~~ {X2} + {X3}
+  {X2} ~~ {X3}
+
+  # effects
+  ab1 := a1*b
+  ab2 := a2*b
+  total1 := c1p + ab1
+  total2 := c2p + ab2
+')
+
+fitC <- sem(model_constrained,
+            sample.cov = S,
+            sample.mean = mu,
+            sample.nobs = N,
+            meanstructure = TRUE,
+            fixed.x = FALSE)
+
+summary(fitC, standardized = TRUE, rsquare = TRUE)
+#parameterEstimates(fitC, standardized = TRUE)[,c("lhs","op","rhs","label","est","se","z","pvalue","std.all")]
+modindices(fitC)
+# --- Unconstrained model (lets X3 -> M be estimated; should be ~0 if truly absent)
+model_free <- glue::glue('
+  {M} ~ a1*{X1} + a2*{X2} + a3*{X3}
+  {Y} ~ c1p*{X1} + c2p*{X2} + c3p*{X3} + b*{M}
+
+  {X1} ~~ {X2} + {X3}
+  {X2} ~~ {X3}
+
+  ab1 := a1*b
+  ab2 := a2*b
+  ab3 := a3*b
+  total1 := c1p + ab1
+  total2 := c2p + ab2
+  total3 := c3p + ab3
+')
+
+fitF <- sem(model_free,
+            sample.cov = S,
+            sample.mean = mu,
+            sample.nobs = N,
+            meanstructure = TRUE,
+            fixed.x = FALSE)
+
+summary(fitF, standardized = TRUE, rsquare = TRUE)
+anova(fitF, fitC)
+set.seed(42)
+dat <- as.data.frame(mvrnorm(n = N, mu = mu, Sigma = S, empirical = TRUE))
+names(dat) <- vars
+var(dat)
+
+# Effect sizes with toy dataset!
+rsquare_med_toy <- rsquare_med(dat, x = "social_pref",
+                               m = "social_comp",
+                               y = "loneliness",
+                               do_bootstrap = TRUE, R = 100, engine='both')
+ups_medes_toy <- upsilons(dat, x = "friendship_quality",
+                          m = "social_comp",
+                          y = "loneliness",
+                          do_bootstrap = TRUE, R = 100, engine='both')
 
 
 
