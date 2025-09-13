@@ -1,7 +1,7 @@
 devtools::install_github("alexm123/medes")
 library(medes)
 library(mice)
-
+library(dplyr)
 
 #Example data for mediation analysis
 set.seed(41)
@@ -70,6 +70,47 @@ c(a = a, b = b, cprime = cprime)
 ###############################################################################
 ###############################################################################
 ###############################################################################
+res_upsilons_param <- upsilons_sem_cov(
+  data = d,
+  x = "x", m = "m", y = "y",
+  R = 500,                  # number of bootstrap replications
+  ci_level = 0.95,          # 95% CI
+  do_bootstrap = TRUE,      # request bootstrap CIs
+  stat = "adjusted"             # get both adjusted & unadjusted
+)
+res_upsilons_param
+
+t_upsilons_sem_cov <- system.time(
+  upsilons_sem_cov(data = d,
+           x = "x", m = "m", y = "y",
+           do_bootstrap = TRUE,
+           R = 3000,
+           stat = "adjusted"))["elapsed"]
+
+t_upsilons_sem <- system.time(upsilons(data = d,
+                             x = "x", m = "m", y = "y",
+                             do_bootstrap = TRUE,
+                             R = 3000,
+                             engine="sem",
+                             stat = "adjusted"))["elapsed"]
+t_upsilons_sem_cov
+t_upsilons_sem
+
+
+
+system.time(res_ups_sem <- upsilons(d, x="x", m="m", y="y", engine="sem", R=1000))
+
+
+######################### MC Bootstrapping
+
+system.time(res_sem_mc <- upsilons_mc(d, x="x", m="m", y="y", engine="sem", R=1000))
+
+upsilons(d, x="x", m="m", y="y", do_bootstrap = FALSE, R=10000)
+res_ups_both_mc <- upsilons_mc(d, x="x", m="m", y="y", R=10000)
+res_ups_both_mc
+
+system.time(res_ups_sem <- upsilons(d, x="x", m="m", y="y", engine="sem", R=1000))
+###########################################################3
 
 
 rsquare_med(d, x = "x", m = "m", y = "y",
@@ -344,17 +385,75 @@ dat <- as.data.frame(mvrnorm(n = N, mu = mu, Sigma = S, empirical = TRUE))
 names(dat) <- vars
 var(dat)
 
-# Effect sizes with toy dataset!
-rsquare_med_toy <- rsquare_med(dat, x = "social_pref",
-                               m = "social_comp",
-                               y = "loneliness",
-                               do_bootstrap = TRUE, R = 100, engine='both')
-ups_medes_toy <- upsilons(dat, x = "friendship_quality",
-                          m = "social_comp",
-                          y = "loneliness",
-                          do_bootstrap = TRUE, R = 100, engine='both')
+# Effect sizes with toy dataset! From Zhang et al.
+# x1 = friendship_quality,
+# x2 = social_pref
+# x3 = prox_prestige
+# m = social_comp
+# y = loneliness
+
+med_stats_table <- function(dat, x_vars, m, y,
+                            do_bootstrap = FALSE, R = 100, engine = "sem",
+                            digits = NULL) {
+  stats <- c("rsquaredmediated_sem",
+             "adj.upsilon_sem",
+             "upsilon_sem",
+             "rsq_ind")
+
+  mat <- sapply(x_vars, function(x) {
+    rs <- rsquare_med(dat, x = x, m = m, y = y,
+                      do_bootstrap = do_bootstrap, R = R, engine = engine)
+    up <- upsilons(dat, x = x, m = m, y = y,
+                   do_bootstrap = do_bootstrap, R = R, engine = engine, stat="both")
+    rind <- rsq_ind(dat, x = x, m = m, y = y,
+                        do_bootstrap = FALSE)
+    rind_val <- as.numeric(rind)[1L]
+    vals <- c(rs$rsquaredmediated_sem,
+              up$adj.upsilon_sem,
+              up$upsilon_sem,
+              rind_val)
+    names(vals) <- stats
+    vals
+  }, simplify = TRUE, USE.NAMES = TRUE)
+
+  df <- as.data.frame(mat, check.names = FALSE)
+  rownames(df) <- stats
+  if (!is.null(digits)) df[] <- lapply(df, round, digits)
+  df
+}
+
+xs <- c("friendship_quality", "social_pref", "prox_prestige")
+tbl <- med_stats_table(dat, x_vars = xs, m = "social_comp", y = "loneliness",
+                       do_bootstrap = FALSE, R = 100, engine = "both", digits = 6)
+tbl
+
+upsilons(dat, x = "friendship_quality", m = "social_comp", y = "loneliness",
+         do_bootstrap = FALSE, stat='both')$upsilon_sem
+
+rsq_ind(dat, x = "friendship_quality", m = "social_comp", y = "loneliness")$rsq_ind
 
 
+mbess_friend <- MBESS::mediation(x = dat[[3]], mediator = dat[[2]], dv = dat[[1]],
+                              bootstrap = FALSE)
+mbess_social <- MBESS::mediation(x = dat[[4]], mediator = dat[[2]], dv = dat[[1]],
+                                 bootstrap = FALSE)
+mbess_prox_prestige <- MBESS::mediation(x = dat[[5]], mediator = dat[[2]], dv = dat[[1]],
+                                        bootstrap = FALSE)
+mbess_friend$Effect.Sizes
+mbess_social$Effect.Sizes
+mbess_prox_prestige$Effect.Sizes
+
+
+
+mbess_up_friend
+mbess_up_social
+mbess_up_loneliness
+
+mbess_up_friend <- MBESS::upsilon(x = dat[[3]], mediator = dat[[2]], dv = dat[[1]],
+                                  bootstrap = FALSE)
+
+mbess_up_friend
+mbess_friend$Effect.Sizes
 
 
 
